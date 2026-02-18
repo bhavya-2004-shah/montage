@@ -1,0 +1,17 @@
+[
+  {
+    "id": "annex-1",
+    "name": "Annex-1",
+    "model": "/models/Annex_tag.glb"
+  },
+  {
+    "id": "annex-2",
+    "name": "Dwelling-1",
+    "model": "/models/Dwelling_tag.glb"
+  },
+  {
+    "id": "lifestyle-1",
+    "name": "Lifestyle-1",
+    "model": "/models/Lifestyle_tag.glb"
+  }
+]
