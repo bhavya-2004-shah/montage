@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useGLTF } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
+import type { NodeRegistrationInput } from "../../state/NodeManager";
 import {
   ROTATE_HANDLE_RADIUS,
   useModelRotation,
@@ -21,6 +22,7 @@ type ModelProps = {
     nextRotationY: number,
   ) => void;
   onBoundsReady?: (sizeX: number) => void;
+  onNodesReady?: (nodes: NodeRegistrationInput[]) => void;
 };
 
 const HIDE_IN_FLOORPLAN = ["ceiling", "ceilings", "roof", "roofs"];
@@ -29,6 +31,8 @@ const NODE_COLOR = "#76aeee";
 const HIERARCHY_COLOR = "#ffffff";
 const EDGE_COLOR = "#000000";
 const EDGE_SELECTED_COLOR = "#ff6a00";
+
+const isNodeMeshName = (name: string) => name.toLowerCase().includes("node");
 
 export function Model3DCompute({
   modelId,
@@ -41,6 +45,7 @@ export function Model3DCompute({
   onDrag,
   onRotate,
   onBoundsReady,
+  onNodesReady,
 }: ModelProps) {
   const { scene } = useGLTF(modelUrl);
 
@@ -73,6 +78,49 @@ export function Model3DCompute({
     const halfZ = Math.max(size.z / 2, 0.5);
 
     return { halfX, halfZ };
+  }, [clonedScene]);
+
+  const nodeSnapshots = useMemo(() => {
+    const sceneBox = new THREE.Box3().setFromObject(clonedScene);
+    const center = new THREE.Vector3();
+    sceneBox.getCenter(center);
+
+    clonedScene.updateWorldMatrix(true, true);
+
+    const worldPosition = new THREE.Vector3();
+    const nodeBox = new THREE.Box3();
+    const snapshots: Array<{
+      key: string;
+      name: string;
+      localPosition: [number, number, number];
+    }> = [];
+
+    let nodeIndex = 0;
+    clonedScene.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      if (!isNodeMeshName(child.name)) return;
+
+      // Some GLBs bake vertex positions and keep object origins at the same point.
+      // Use world-space bounds center first, then fall back to object origin.
+      nodeBox.setFromObject(child);
+      if (!nodeBox.isEmpty()) {
+        nodeBox.getCenter(worldPosition);
+      } else {
+        child.getWorldPosition(worldPosition);
+      }
+
+      const local = worldPosition.clone().sub(center);
+      const key = `${child.name}-${nodeIndex}`;
+      nodeIndex += 1;
+
+      snapshots.push({
+        key,
+        name: child.name,
+        localPosition: [local.x, local.y, local.z],
+      });
+    });
+
+    return snapshots;
   }, [clonedScene]);
 
   const {
@@ -119,6 +167,25 @@ export function Model3DCompute({
   }, [modelId, modelUrl]);
 
   useEffect(() => {
+    if (!onNodesReady) return;
+
+    const worldNodes = nodeSnapshots.map((node) => {
+      const local = new THREE.Vector3(...node.localPosition);
+      local.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
+      local.add(new THREE.Vector3(...position));
+
+      return {
+        key: node.key,
+        name: node.name,
+        localPosition: node.localPosition,
+        worldPosition: [local.x, local.y, local.z] as [number, number, number],
+      };
+    });
+
+    onNodesReady(worldNodes);
+  }, [nodeSnapshots, onNodesReady, position, rotationY]);
+
+  useEffect(() => {
     if (!rootRef.current || !sceneRef.current) return;
 
     const root = rootRef.current;
@@ -155,7 +222,7 @@ export function Model3DCompute({
           originalMaterials.current.set(child, child.material);
         }
 
-        const isNode = name.includes("node");
+        const isNode = isNodeMeshName(name);
         child.material = new THREE.MeshStandardMaterial({
           color: isNode ? NODE_COLOR : HIERARCHY_COLOR,
           roughness: 0.7,

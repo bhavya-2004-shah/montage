@@ -5,6 +5,17 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOKEN = import.meta.env.VITE_API_TOKEN;
 const DEFAULT_MODEL_SIZE_X = 6;
 
+type ModuleApiItem = {
+  id: string | number;
+  name?: string;
+  moduleType?: { name?: string };
+  moduleImage?: string;
+  glbFile?: string;
+  price?: number;
+  noOfBathrooms?: number;
+  noOfBedrooms?: number;
+};
+
 export class ModelManager {
   models: ModelPreset[] = [];
   selectedModelIds: string[] = [];
@@ -29,16 +40,15 @@ export class ModelManager {
         },
       });
 
-      const data = await res.json();
-      const modules = data;
+      const data = (await res.json()) as ModuleApiItem[];
 
       runInAction(() => {
-        this.models = modules.map((item: any) => ({
+        this.models = data.map((item) => ({
           id: String(item.id),
-          name: item.name,
+          name: item.name ?? "Unnamed Module",
           category: item.moduleType?.name ?? "General",
-          thumbnailPath: item.moduleImage,
-          modelPath: item.glbFile,
+          thumbnailPath: item.moduleImage ?? "",
+          modelPath: item.glbFile ?? "",
           price: item.price ?? 0,
           noOfBathrooms: item.noOfBathrooms ?? 0,
           noOfBedrooms: item.noOfBedrooms ?? 0,

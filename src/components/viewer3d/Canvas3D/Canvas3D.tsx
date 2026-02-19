@@ -7,7 +7,9 @@ import { Model3DCompute } from "../Model3DCompute";
 
 export const Canvas3D = observer(() => {
   const stateManager = useMainContext();
-  const modelManager = stateManager.designManager.modelManager;
+  const designManager = stateManager.designManager;
+  const modelManager = designManager.modelManager;
+  const nodeManager = designManager.nodeManager;
 
   const placedModels = modelManager.placedModels;
   const selectedId = modelManager.selectedPlacedModelId;
@@ -39,11 +41,14 @@ export const Canvas3D = observer(() => {
             modelUrl={model.modelPath}
             position={model.position}
             rotationY={model.rotationY ?? 0}
-            onDrag={(nextPosition) => modelManager.moveModel(model.id, nextPosition)}
+            onDrag={(nextPosition) =>
+              designManager.moveModelWithSnap(model.id, nextPosition)
+            }
             onRotate={(nextPosition, nextRotationY) =>
               modelManager.rotateModel(model.id, nextPosition, nextRotationY)
             }
             onBoundsReady={(sizeX) => modelManager.setModelSizeX(model.id, sizeX)}
+            onNodesReady={(nodes) => nodeManager.registerModelNodes(model.id, nodes)}
             floorPlanMode={floorPlanMode}
             isSelected={model.id === selectedId}
             onSelect={() => modelManager.selectPlacedModel(model.id)}
