@@ -5,6 +5,8 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOKEN = import.meta.env.VITE_API_TOKEN;
 const DEFAULT_MODEL_SIZE_X = 6;
 const DEFAULT_MODEL_SIZE_Z = 6;
+const FIRST_MODEL_CLEARANCE = 0.2;
+const CENTER_BLOCK_EPSILON = 0.001;
 
 type ModuleApiItem = {
   id: string | number;
@@ -118,15 +120,89 @@ export class ModelManager {
     return [x, 0, z];
   }
 
-  addModel(model: ModelPreset) {
+  private getNonOverlappingPositionFromFirstModel(
+    position: [number, number, number],
+    candidateSizeX: number,
+    candidateSizeZ: number,
+  ): [number, number, number] {
+    const firstModel = this.placedModels[0];
+    if (!firstModel) return position;
+
+    const [x, y, z] = position;
+    const [firstX, , firstZ] = firstModel.position;
+
+    const halfSumX = (firstModel.boundsSizeX + candidateSizeX) * 0.5;
+    const halfSumZ = (firstModel.boundsSizeZ + candidateSizeZ) * 0.5;
+
+    const dx = x - firstX;
+    const dz = z - firstZ;
+    const overlapX = halfSumX - Math.abs(dx);
+    const overlapZ = halfSumZ - Math.abs(dz);
+
+    if (overlapX <= 0 || overlapZ <= 0) {
+      return position;
+    }
+
+    // Push only enough to clear the first model's footprint plus a small gap.
+    if (overlapX <= overlapZ) {
+      const directionX = Math.sign(dx) || 1;
+      return [x + directionX * (overlapX + FIRST_MODEL_CLEARANCE), y, z];
+    }
+
+    const directionZ = Math.sign(dz) || 1;
+    return [x, y, z + directionZ * (overlapZ + FIRST_MODEL_CLEARANCE)];
+  }
+
+  private isAtCenter(position: [number, number, number]) {
+    return (
+      Math.abs(position[0]) <= CENTER_BLOCK_EPSILON &&
+      Math.abs(position[2]) <= CENTER_BLOCK_EPSILON
+    );
+  }
+
+  addModel(model: ModelPreset, initialDropPosition?: [number, number, number]) {
     const id = crypto.randomUUID();
     const initialSizeX = DEFAULT_MODEL_SIZE_X;
 
     const isFirst = this.placedModels.length === 0;
+    const placedFromDrop = !isFirst && Boolean(initialDropPosition);
+
+    const desiredPosition: [number, number, number] = isFirst
+      ? [0, 0, 0]
+      : initialDropPosition ?? this.getRandomNearCenter();
+
+    if (!isFirst && this.isAtCenter(desiredPosition)) {
+      if (typeof window !== "undefined") {
+        window.alert("Only the first module can be placed at the center.");
+      }
+      console.warn("[DnD] Blocked placement at center for non-first module", {
+        sourceModelId: model.id,
+        sourceModelName: model.name,
+        desiredPosition,
+      });
+      return;
+    }
 
     const initialPosition: [number, number, number] = isFirst
       ? [0, 0, 0]
-      : this.getRandomNearCenter();
+      : this.getNonOverlappingPositionFromFirstModel(
+          desiredPosition,
+          initialSizeX,
+          DEFAULT_MODEL_SIZE_Z,
+        );
+
+    if (!isFirst && this.isAtCenter(initialPosition)) {
+      if (typeof window !== "undefined") {
+        window.alert("Only the first module can be placed at the center.");
+      }
+      console.warn("[DnD] Blocked computed center placement for non-first module", {
+        sourceModelId: model.id,
+        sourceModelName: model.name,
+        desiredPosition,
+        initialPosition,
+      });
+      return;
+    }
 
     this.placedModels.push({
       id,
@@ -146,6 +222,20 @@ export class ModelManager {
     } else {
       this.selectedPlacedModelId = id;
     }
+
+    console.log("[DnD] Model placed", {
+      placedModelId: id,
+      sourceModelId: model.id,
+      sourceModelName: model.name,
+      isFirstModel: isFirst,
+      placementMode: isFirst
+        ? "first-model-centered"
+        : placedFromDrop
+          ? "drop-world-position"
+          : "random-near-center",
+      desiredPosition,
+      position: initialPosition,
+    });
   }
 
   setModelBounds(id: string, sizeX: number, sizeZ: number) {

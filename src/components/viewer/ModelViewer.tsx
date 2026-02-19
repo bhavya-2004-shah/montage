@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect } from "react";
 import { observer } from "mobx-react-lite";
 import { useMainContext } from "../../hooks/useMainContext";
 
+const MODEL_DND_MIME = "application/x-montage-model-id";
+
 export const ModelViewer = observer(() => {
   const stateManager = useMainContext();
   const modelManager = stateManager.designManager.modelManager;
@@ -67,7 +69,17 @@ export const ModelViewer = observer(() => {
             <button
               key={model.id}
               type="button"
+              draggable
               onClick={() => modelManager.addModel(model)}
+              onDragStart={(event) => {
+                event.dataTransfer.setData(MODEL_DND_MIME, model.id);
+                event.dataTransfer.setData("text/plain", model.id);
+                event.dataTransfer.effectAllowed = "copy";
+                console.log("[DnD] Drag started from sidebar", {
+                  modelId: model.id,
+                  modelName: model.name,
+                });
+              }}
               className={`w-full rounded-lg border bg-[#f7f8fa] p-3 text-left transition ${
                 isPlaced
                   ? "border-[#7ebde6] shadow-[0_0_0_1px_rgba(126,189,230,0.5)]"
@@ -80,6 +92,7 @@ export const ModelViewer = observer(() => {
                   <img
                     src={model.thumbnailPath}
                     alt={model.name}
+                    draggable={false}
                     className="h-44 w-full object-contain"
                   />
                 </div>
