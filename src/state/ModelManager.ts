@@ -4,6 +4,7 @@ import type { ModelPreset, PlacedModel } from "./types";
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOKEN = import.meta.env.VITE_API_TOKEN;
 const DEFAULT_MODEL_SIZE_X = 6;
+const DEFAULT_MODEL_SIZE_Z = 6;
 
 type ModuleApiItem = {
   id: string | number;
@@ -134,6 +135,7 @@ export class ModelManager {
       rotationY: 0,
       draggedPosition: initialPosition,
       boundsSizeX: initialSizeX,
+      boundsSizeZ: DEFAULT_MODEL_SIZE_Z,
       lockToCenter: isFirst,
       selectable: !isFirst,
     });
@@ -146,7 +148,7 @@ export class ModelManager {
     }
   }
 
-  setModelSizeX(id: string, sizeX: number) {
+  setModelBounds(id: string, sizeX: number, sizeZ: number) {
     const targetModel = this.placedModels.find(
       (placedModel) => placedModel.id === id,
     );
@@ -154,13 +156,31 @@ export class ModelManager {
     if (!targetModel) return;
 
     const safeSizeX = this.sanitizeSizeX(sizeX);
-    if (targetModel.boundsSizeX === safeSizeX) return;
+    const safeSizeZ = this.sanitizeSizeX(sizeZ);
+
+    if (
+      targetModel.boundsSizeX === safeSizeX &&
+      targetModel.boundsSizeZ === safeSizeZ
+    ) {
+      return;
+    }
 
     targetModel.boundsSizeX = safeSizeX;
+    targetModel.boundsSizeZ = safeSizeZ;
+  }
+
+  setModelSizeX(id: string, sizeX: number) {
+    const targetModel = this.placedModels.find(
+      (placedModel) => placedModel.id === id,
+    );
+    if (!targetModel) return;
+    this.setModelBounds(id, sizeX, targetModel.boundsSizeZ);
   }
 
   selectPlacedModel(id: string) {
     if (id === this.firstModelID) return;
+    const targetModel = this.placedModels.find((placedModel) => placedModel.id === id);
+    if (!targetModel?.selectable) return;
     this.selectedPlacedModelId = id;
   }
 

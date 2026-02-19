@@ -16,6 +16,7 @@ export type PlacedModel = {
   draggedPosition: [number, number, number];
   rotationY: number;
   boundsSizeX: number;
+  boundsSizeZ: number;
   lockToCenter: boolean;
   selectable: boolean;
 };

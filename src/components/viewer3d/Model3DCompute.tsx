@@ -21,7 +21,7 @@ type ModelProps = {
     nextPosition: [number, number, number],
     nextRotationY: number,
   ) => void;
-  onBoundsReady?: (sizeX: number) => void;
+  onBoundsReady?: (sizeX: number, sizeZ: number) => void;
   onNodesReady?: (nodes: NodeRegistrationInput[]) => void;
 };
 
@@ -152,7 +152,7 @@ export function Model3DCompute({
     const size = new THREE.Vector3();
     box.getSize(size);
 
-    onBoundsReady(Math.max(size.x, 0.5));
+    onBoundsReady(Math.max(size.x, 0.5), Math.max(size.z, 0.5));
     hasReportedBoundsRef.current = true;
   }, [clonedScene, onBoundsReady]);
 

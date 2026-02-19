@@ -41,13 +41,16 @@ export const Canvas3D = observer(() => {
             modelUrl={model.modelPath}
             position={model.position}
             rotationY={model.rotationY ?? 0}
-            onDrag={(nextPosition) =>
-              designManager.moveModelWithSnap(model.id, nextPosition)
-            }
+            onDrag={(nextPosition) => {
+              if (!model.selectable) return;
+              designManager.moveModelWithSnap(model.id, nextPosition);
+            }}
             onRotate={(nextPosition, nextRotationY) =>
               modelManager.rotateModel(model.id, nextPosition, nextRotationY)
             }
-            onBoundsReady={(sizeX) => modelManager.setModelSizeX(model.id, sizeX)}
+            onBoundsReady={(sizeX, sizeZ) =>
+              modelManager.setModelBounds(model.id, sizeX, sizeZ)
+            }
             onNodesReady={(nodes) => nodeManager.registerModelNodes(model.id, nodes)}
             floorPlanMode={floorPlanMode}
             isSelected={model.id === selectedId}

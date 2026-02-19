@@ -55,6 +55,23 @@ export class DesignManager {
     this.nodeManager.setNodesFree(nodeAId, nodeBId);
   }
 
+  private enforceSnappedTransform(
+    movingModelId: string,
+    movingNodeId: string,
+    staticNodeId: string,
+  ) {
+    const alignedPosition = this.snapManager.getAlignedPositionForNodePair(
+      movingModelId,
+      movingNodeId,
+      staticNodeId,
+      this.modelManager,
+      this.nodeManager,
+    );
+    if (!alignedPosition) return;
+
+    this.modelManager.moveModel(movingModelId, alignedPosition);
+  }
+
   private releaseModelSnaps(modelId: string) {
     const modelNodeIds = this.nodeManager
       .getNodesByModel(modelId)
@@ -69,6 +86,11 @@ export class DesignManager {
   }
 
   moveModelWithSnap(id: string, desiredPosition: [number, number, number]) {
+    const movingModel = this.modelManager.placedModels.find(
+      (placedModel) => placedModel.id === id,
+    );
+    if (!movingModel || !movingModel.selectable) return;
+
     // Recompute snapping continuously while dragging by clearing existing
     // links for the moving module before finding the current best target.
     this.releaseModelSnaps(id);
@@ -88,15 +110,20 @@ export class DesignManager {
 
     this.modelManager.moveModel(id, snap.snappedPosition);
     this.setNodesSnapped(snap.movingNodeId, snap.staticNodeId);
+    this.enforceSnappedTransform(id, snap.movingNodeId, snap.staticNodeId);
+    console.log("[SnapManager] Module snapped", {
+      movingModelId: id,
+      movingNodeId: snap.movingNodeId,
+      staticNodeId: snap.staticNodeId,
+      snappedPosition: snap.snappedPosition,
+    });
+    movingModel.selectable = false;
+    this.modelManager.clearSelection();
 
-    if (
-      this.snapManager.shouldAlertForSnap(
-        id,
-        snap.movingNodeId,
-        snap.staticNodeId,
-      )
-    ) {
-      window.alert(`Nodes snapped: ${snap.movingNodeId} <> ${snap.staticNodeId}`);
-    }
+    this.snapManager.shouldAlertForSnap(
+      id,
+      snap.movingNodeId,
+      snap.staticNodeId,
+    );
   }
 }
