@@ -89,7 +89,7 @@ export class DesignManager {
     const movingModel = this.modelManager.placedModels.find(
       (placedModel) => placedModel.id === id,
     );
-    if (!movingModel || !movingModel.selectable) return;
+    if (!movingModel || !movingModel.selectable) return false;
 
     // Recompute snapping continuously while dragging by clearing existing
     // links for the moving module before finding the current best target.
@@ -105,7 +105,7 @@ export class DesignManager {
     if (!snap) {
       this.modelManager.moveModel(id, desiredPosition);
       this.snapManager.clearLastSnap(id);
-      return;
+      return false;
     }
 
     this.modelManager.moveModel(id, snap.snappedPosition);
@@ -125,5 +125,6 @@ export class DesignManager {
       snap.movingNodeId,
       snap.staticNodeId,
     );
+    return true;
   }
 }

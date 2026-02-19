@@ -42,8 +42,8 @@ export const Canvas3D = observer(() => {
             position={model.position}
             rotationY={model.rotationY ?? 0}
             onDrag={(nextPosition) => {
-              if (!model.selectable) return;
-              designManager.moveModelWithSnap(model.id, nextPosition);
+              if (!model.selectable) return false;
+              return designManager.moveModelWithSnap(model.id, nextPosition);
             }}
             onRotate={(nextPosition, nextRotationY) =>
               modelManager.rotateModel(model.id, nextPosition, nextRotationY)

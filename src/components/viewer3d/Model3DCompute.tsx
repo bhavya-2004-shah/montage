@@ -16,7 +16,7 @@ type ModelProps = {
   rotationY?: number;
   isSelected: boolean;
   onSelect: () => void;
-  onDrag?: (nextPosition: [number, number, number]) => void;
+  onDrag?: (nextPosition: [number, number, number]) => boolean | void;
   onRotate?: (
     nextPosition: [number, number, number],
     nextRotationY: number,
@@ -335,7 +335,14 @@ export function Model3DCompute({
     const nextZ = intersection.z + dragOffsetRef.current.z;
 
     rootRef.current.position.set(nextX, nextY, nextZ);
-    onDrag?.([nextX, nextY, nextZ]);
+    const snapped = onDrag?.([nextX, nextY, nextZ]) === true;
+    if (!snapped) return;
+
+    isDraggingRef.current = false;
+    const targetWithCapture = e.target as {
+      releasePointerCapture?: (pointerId: number) => void;
+    };
+    targetWithCapture.releasePointerCapture?.(e.pointerId);
   };
 
   const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
