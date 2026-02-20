@@ -1,6 +1,7 @@
-import { Suspense, useCallback, useEffect, useRef } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
+import { PerformanceMonitor, Stats } from "@react-three/drei";
 import { observer } from "mobx-react-lite";
 import { useMainContext } from "../../../hooks/useMainContext";
 import { Cameras } from "../camera/Camera";
@@ -34,6 +35,7 @@ export const Canvas3D = observer(() => {
   const ndcRef = useRef(new THREE.Vector2());
   const intersectionRef = useRef(new THREE.Vector3());
   const groundPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const [adaptiveDpr, setAdaptiveDpr] = useState(1.5);
 
   const placedModels = modelManager.placedModels;
   const selectedId = modelManager.selectedPlacedModelId;
@@ -159,12 +161,22 @@ export const Canvas3D = observer(() => {
       onDrop={handleDrop}
     >
       <Canvas
-        dpr={[1, 2]}
+        dpr={adaptiveDpr}
         style={{ background: "#ffffff" }}
         onPointerMissed={() => {
           modelManager.clearSelection();
         }}
       >
+        <PerformanceMonitor
+          bounds={(refreshRate) => (refreshRate > 90 ? [55, 90] : [45, 60]) }
+          onChange={({ factor }) => {
+            // Scale DPR between 1 and 2 using monitor confidence.
+            setAdaptiveDpr(1 + factor);
+          }}
+        />
+        {import.meta.env.DEV && <Stats showPanel={0} className="r3f-stats-top-right"
+        />}
+
         <CameraTracker
           onCameraChange={(camera) => {
             activeCameraRef.current = camera;
@@ -202,7 +214,7 @@ export const Canvas3D = observer(() => {
               onNodesReady={(nodes) => nodeManager.registerModelNodes(model.id, nodes)}
               floorPlanMode={floorPlanMode}
               isSelected={model.id === selectedId}
-              onSelect={() => modelManager.selectPlacedModel(model.id)}
+              onSelect={() => designManager.selectModelForEditing(model.id)}
             />
           ))}
         </Suspense>

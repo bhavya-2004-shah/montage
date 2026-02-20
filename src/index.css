@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+.r3f-stats-top-right {
+  position: fixed !important;
+  top: 12px !important;
+  right: 22px !important;
+  left: auto !important;
+  z-index: 100 !important;
+  transform: scale(2);
+  transform-origin: top right;
+}

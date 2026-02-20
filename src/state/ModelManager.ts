@@ -313,7 +313,10 @@ export class ModelManager {
   selectPlacedModel(id: string) {
     if (id === this.firstModelID) return;
     const targetModel = this.placedModels.find((placedModel) => placedModel.id === id);
-    if (!targetModel?.selectable) return;
+    if (!targetModel) return;
+    if (!targetModel.selectable) {
+      targetModel.selectable = true;
+    }
     this.selectedPlacedModelId = id;
   }
 

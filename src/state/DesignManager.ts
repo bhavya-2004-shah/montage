@@ -11,6 +11,8 @@ export class DesignManager {
   nodeManager: NodeManager;
   connectionGraphManager: ConnectionGraphManager;
   snapManager: SnapManager;
+  private unsnapHoldPositionByModel = new Map<string, [number, number, number]>();
+  private readonly unsnapReleaseDistance = 0.45;
 
   constructor(stateManager: StateManager) {
     this.stateManager = stateManager;
@@ -85,11 +87,72 @@ export class DesignManager {
     });
   }
 
+  selectModelForEditing(id: string) {
+    const targetModel = this.modelManager.placedModels.find(
+      (placedModel) => placedModel.id === id,
+    );
+    if (!targetModel || targetModel.lockToCenter) return;
+
+    if (!targetModel.selectable) {
+      const modelNodeIds = this.nodeManager
+        .getNodesByModel(id)
+        .map((node) => node.id);
+      const edgeKeys = new Set<string>();
+      const releasedEdges: Array<{ nodeId: string; connectedNodeId: string }> = [];
+
+      modelNodeIds.forEach((nodeId) => {
+        const connectedNodeIds = this.connectionGraphManager.getConnections(nodeId);
+        connectedNodeIds.forEach((connectedNodeId) => {
+          const edgeKey =
+            nodeId < connectedNodeId
+              ? `${nodeId}|${connectedNodeId}`
+              : `${connectedNodeId}|${nodeId}`;
+          if (edgeKeys.has(edgeKey)) return;
+          edgeKeys.add(edgeKey);
+          releasedEdges.push({ nodeId, connectedNodeId });
+        });
+      });
+
+      this.releaseModelSnaps(id);
+      this.snapManager.clearLastSnap(id);
+      targetModel.selectable = true;
+      this.unsnapHoldPositionByModel.set(id, [...targetModel.position]);
+
+      console.log("[SnapManager] Module unsnapped on selection", {
+        modelId: id,
+        releasedEdgeCount: releasedEdges.length,
+        releasedEdges,
+        unsnapReleaseDistance: this.unsnapReleaseDistance,
+      });
+    }
+
+    this.modelManager.selectPlacedModel(id);
+  }
+
   moveModelWithSnap(id: string, desiredPosition: [number, number, number]) {
     const movingModel = this.modelManager.placedModels.find(
       (placedModel) => placedModel.id === id,
     );
     if (!movingModel || !movingModel.selectable) return false;
+
+    const unsnapHoldPosition = this.unsnapHoldPositionByModel.get(id);
+    if (unsnapHoldPosition) {
+      const deltaX = desiredPosition[0] - unsnapHoldPosition[0];
+      const deltaZ = desiredPosition[2] - unsnapHoldPosition[2];
+      const distanceFromUnsnapAnchor = Math.hypot(deltaX, deltaZ);
+
+      if (distanceFromUnsnapAnchor < this.unsnapReleaseDistance) {
+        this.modelManager.moveModel(id, desiredPosition);
+        this.snapManager.clearLastSnap(id);
+        return false;
+      }
+
+      this.unsnapHoldPositionByModel.delete(id);
+      console.log("[SnapManager] Unsnap hold released; snapping re-enabled", {
+        modelId: id,
+        distanceFromUnsnapAnchor,
+      });
+    }
 
     // Recompute snapping continuously while dragging by clearing existing
     // links for the moving module before finding the current best target.
@@ -117,6 +180,7 @@ export class DesignManager {
       staticNodeId: snap.staticNodeId,
       snappedPosition: snap.snappedPosition,
     });
+    this.unsnapHoldPositionByModel.delete(id);
     movingModel.selectable = false;
     this.modelManager.clearSelection();
 
