@@ -96,34 +96,29 @@ export class ModelManager {
 
     this.firstModelID = this.placedModels[0]?.id ?? null;
 
+    this.placedModels.forEach((model, index) => {
+      if (index === 0) return;
+
+      const constrainedPosition = this.constrainPositionAgainstFirstModel(
+        model.id,
+        model.position,
+        model.boundsSizeX,
+        model.boundsSizeZ,
+      );
+      model.position = constrainedPosition;
+      model.draggedPosition = constrainedPosition;
+    });
+
     if (this.selectedPlacedModelId === this.firstModelID) {
       this.selectedPlacedModelId = null;
     }
-  }
-
-  private getRandomNearCenter(): [number, number, number] {
-    const radius = 9;
-    const angle = Math.random() * Math.PI * 2;
-
-    let centerX = 0;
-    let centerZ = 0;
-
-    if (this.placedModels.length > 0) {
-      const first = this.placedModels[0];
-      centerX = first.position[0];
-      centerZ = first.position[2];
-    }
-
-    const x = centerX + Math.cos(angle) * radius;
-    const z = centerZ + Math.sin(angle) * radius;
-
-    return [x, 0, z];
   }
 
   private getNonOverlappingPositionFromFirstModel(
     position: [number, number, number],
     candidateSizeX: number,
     candidateSizeZ: number,
+    directionHint?: [number, number, number],
   ): [number, number, number] {
     const firstModel = this.placedModels[0];
     if (!firstModel) return position;
@@ -143,14 +138,39 @@ export class ModelManager {
       return position;
     }
 
+    const hintDx = (directionHint?.[0] ?? x) - firstX;
+    const hintDz = (directionHint?.[2] ?? z) - firstZ;
+
     // Push only enough to clear the first model's footprint plus a small gap.
     if (overlapX <= overlapZ) {
-      const directionX = Math.sign(dx) || 1;
+      const directionX = Math.sign(dx) || Math.sign(hintDx) || 1;
       return [x + directionX * (overlapX + FIRST_MODEL_CLEARANCE), y, z];
     }
 
-    const directionZ = Math.sign(dz) || 1;
+    const directionZ = Math.sign(dz) || Math.sign(hintDz) || 1;
     return [x, y, z + directionZ * (overlapZ + FIRST_MODEL_CLEARANCE)];
+  }
+
+  private constrainPositionAgainstFirstModel(
+    modelId: string,
+    desiredPosition: [number, number, number],
+    fallbackSizeX = DEFAULT_MODEL_SIZE_X,
+    fallbackSizeZ = DEFAULT_MODEL_SIZE_Z,
+  ): [number, number, number] {
+    if (modelId === this.firstModelID) {
+      return [0, desiredPosition[1], 0];
+    }
+
+    const targetModel = this.placedModels.find((placedModel) => placedModel.id === modelId);
+    const candidateSizeX = this.sanitizeSizeX(targetModel?.boundsSizeX ?? fallbackSizeX);
+    const candidateSizeZ = this.sanitizeSizeX(targetModel?.boundsSizeZ ?? fallbackSizeZ);
+
+    return this.getNonOverlappingPositionFromFirstModel(
+      desiredPosition,
+      candidateSizeX,
+      candidateSizeZ,
+      targetModel?.position ?? desiredPosition,
+    );
   }
 
   private isAtCenter(position: [number, number, number]) {
@@ -165,11 +185,22 @@ export class ModelManager {
     const initialSizeX = DEFAULT_MODEL_SIZE_X;
 
     const isFirst = this.placedModels.length === 0;
-    const placedFromDrop = !isFirst && Boolean(initialDropPosition);
+    const placedFromDrop = Boolean(initialDropPosition);
+
+    if (!isFirst && !initialDropPosition) {
+      if (typeof window !== "undefined") {
+        window.alert("Please drag and drop the module onto the canvas.");
+      }
+      console.warn("[DnD] Blocked non-first module placement without drop position", {
+        sourceModelId: model.id,
+        sourceModelName: model.name,
+      });
+      return;
+    }
 
     const desiredPosition: [number, number, number] = isFirst
       ? [0, 0, 0]
-      : initialDropPosition ?? this.getRandomNearCenter();
+      : (initialDropPosition as [number, number, number]);
 
     if (!isFirst && this.isAtCenter(desiredPosition)) {
       if (typeof window !== "undefined") {
@@ -185,7 +216,8 @@ export class ModelManager {
 
     const initialPosition: [number, number, number] = isFirst
       ? [0, 0, 0]
-      : this.getNonOverlappingPositionFromFirstModel(
+      : this.constrainPositionAgainstFirstModel(
+          id,
           desiredPosition,
           initialSizeX,
           DEFAULT_MODEL_SIZE_Z,
@@ -232,7 +264,7 @@ export class ModelManager {
         ? "first-model-centered"
         : placedFromDrop
           ? "drop-world-position"
-          : "random-near-center",
+          : "blocked-no-drop-position",
       desiredPosition,
       position: initialPosition,
     });
@@ -257,6 +289,17 @@ export class ModelManager {
 
     targetModel.boundsSizeX = safeSizeX;
     targetModel.boundsSizeZ = safeSizeZ;
+
+    if (!targetModel.lockToCenter) {
+      const constrainedPosition = this.constrainPositionAgainstFirstModel(
+        id,
+        targetModel.position,
+        safeSizeX,
+        safeSizeZ,
+      );
+      targetModel.position = constrainedPosition;
+      targetModel.draggedPosition = constrainedPosition;
+    }
   }
 
   setModelSizeX(id: string, sizeX: number) {
@@ -280,8 +323,9 @@ export class ModelManager {
     const move = this.placedModels.find((p) => p.id === id);
     if (!move) return;
 
-    move.position = position;
-    move.draggedPosition = position;
+    const constrainedPosition = this.constrainPositionAgainstFirstModel(id, position);
+    move.position = constrainedPosition;
+    move.draggedPosition = constrainedPosition;
   }
 
   rotateModel(
@@ -298,9 +342,10 @@ export class ModelManager {
       return;
     }
 
+    const constrainedPosition = this.constrainPositionAgainstFirstModel(id, position);
     targetModel.rotationY = rotationY;
-    targetModel.position = position;
-    targetModel.draggedPosition = position;
+    targetModel.position = constrainedPosition;
+    targetModel.draggedPosition = constrainedPosition;
   }
 
   removeModel(id: string) {

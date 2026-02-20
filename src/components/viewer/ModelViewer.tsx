@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { observer } from "mobx-react-lite";
 import { useMainContext } from "../../hooks/useMainContext";
 
@@ -7,6 +7,7 @@ const MODEL_DND_MIME = "application/x-montage-model-id";
 export const ModelViewer = observer(() => {
   const stateManager = useMainContext();
   const modelManager = stateManager.designManager.modelManager;
+  const draggedModelIdRef = useRef<string | null>(null);
 
   const placedModels = modelManager.placedModels;
   const [searchValue, setSearchValue] = useState("");
@@ -70,8 +71,13 @@ export const ModelViewer = observer(() => {
               key={model.id}
               type="button"
               draggable
-              onClick={() => modelManager.addModel(model)}
+              onClick={() => {
+                // Prevent accidental click-add after a drag interaction.
+                if (draggedModelIdRef.current === model.id) return;
+                modelManager.addModel(model);
+              }}
               onDragStart={(event) => {
+                draggedModelIdRef.current = model.id;
                 event.dataTransfer.setData(MODEL_DND_MIME, model.id);
                 event.dataTransfer.setData("text/plain", model.id);
                 event.dataTransfer.effectAllowed = "copy";
@@ -79,6 +85,16 @@ export const ModelViewer = observer(() => {
                   modelId: model.id,
                   modelName: model.name,
                 });
+              }}
+              onDragEnd={() => {
+                // Delay reset one tick so a trailing click can be ignored.
+                const draggedModelId = draggedModelIdRef.current;
+                if (draggedModelId !== model.id) return;
+                window.setTimeout(() => {
+                  if (draggedModelIdRef.current === model.id) {
+                    draggedModelIdRef.current = null;
+                  }
+                }, 0);
               }}
               className={`w-full rounded-lg border bg-[#f7f8fa] p-3 text-left transition ${
                 isPlaced

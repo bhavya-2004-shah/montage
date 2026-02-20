@@ -159,12 +159,14 @@ export function Model3DCompute({
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const box = new THREE.Box3().setFromObject(sceneRef.current);
+    // Center using local cloned geometry only. Using sceneRef (already under
+    // translated root) introduces world-space offset and can visually stack modules.
+    const box = new THREE.Box3().setFromObject(clonedScene);
     const center = new THREE.Vector3();
     box.getCenter(center);
 
-    sceneRef.current.position.sub(center);
-  }, [modelId, modelUrl]);
+    sceneRef.current.position.set(-center.x, -center.y, -center.z);
+  }, [clonedScene, modelId, modelUrl]);
 
   useEffect(() => {
     if (!onNodesReady) return;

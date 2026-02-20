@@ -13,6 +13,7 @@ type SnapResult = {
 
 export class SnapManager {
   private readonly snapThreshold = 0.3;
+  private readonly connectedNodeGap = 0;
   private lastSnapEdgeByModel = new Map<string, string>();
 
   constructor() {
@@ -89,12 +90,14 @@ export class SnapManager {
       best.staticWorld,
       desiredPosition,
     );
-    const snappedPosition = this.getZeroGapPosition(
+    const staticModel = this.getModelById(best.staticNode.modelId, modelManager);
+    if (!staticModel) return null;
+
+    const snappedPosition = this.getConnectedPosition(
       movingModel,
-      this.getModelById(best.staticNode.modelId, modelManager),
+      staticModel,
       nodeAlignedPosition,
-      best.movingWorld,
-      best.staticWorld,
+      desiredPosition,
     );
 
     return {
@@ -140,12 +143,11 @@ export class SnapManager {
       staticWorld,
       movingModel.position,
     );
-    return this.getZeroGapPosition(
+    return this.getConnectedPosition(
       movingModel,
       staticModel,
       nodeAlignedPosition,
-      movingWorld,
-      staticWorld,
+      movingModel.position,
     );
   }
 
@@ -199,39 +201,52 @@ export class SnapManager {
     return modelManager.placedModels.find((placedModel) => placedModel.id === modelId) ?? null;
   }
 
-  private getZeroGapPosition(
+  private getConnectedPosition(
     movingModel: PlacedModel,
-    staticModel: PlacedModel | null,
-    movingPosition: [number, number, number],
-    movingNodeWorld: THREE.Vector3,
-    staticNodeWorld: THREE.Vector3,
+    staticModel: PlacedModel,
+    nodeAlignedPosition: [number, number, number],
+    referenceMovingPosition: [number, number, number],
   ): [number, number, number] {
-    if (!staticModel) return movingPosition;
+    const axis = this.getConnectionAxis(referenceMovingPosition, staticModel.position);
+    const shiftedPosition: [number, number, number] = [
+      nodeAlignedPosition[0] + axis.x * this.connectedNodeGap,
+      nodeAlignedPosition[1],
+      nodeAlignedPosition[2] + axis.z * this.connectedNodeGap,
+    ];
 
-    const axis = this.getSnapAxis(movingNodeWorld, staticNodeWorld);
-    const movingCenter = new THREE.Vector3(...movingPosition);
+    const direction = axis.clone().normalize();
+    const movingCenter = new THREE.Vector3(...shiftedPosition);
     const staticCenter = new THREE.Vector3(...staticModel.position);
     const centerDelta = movingCenter.clone().sub(staticCenter);
+    const signedDistance = centerDelta.dot(direction);
+    const movingExtent = this.getExtentAlongAxis(movingModel, direction);
+    const staticExtent = this.getExtentAlongAxis(staticModel, direction);
+    const minDistance = movingExtent + staticExtent;
 
-    const side = Math.sign(centerDelta.dot(axis)) || -1;
-    const movingExtent = this.getExtentAlongAxis(movingModel, axis);
-    const staticExtent = this.getExtentAlongAxis(staticModel, axis);
-    const targetDistance = (movingExtent + staticExtent) * side;
+    if (Math.abs(signedDistance) >= minDistance) {
+      return shiftedPosition;
+    }
 
-    const centerParallel = axis.clone().multiplyScalar(centerDelta.dot(axis));
-    const centerPerpendicular = centerDelta.clone().sub(centerParallel);
-    const correctedDelta = centerPerpendicular.add(axis.clone().multiplyScalar(targetDistance));
-    const correctedCenter = staticCenter.clone().add(correctedDelta);
-
-    return [correctedCenter.x, movingPosition[1], correctedCenter.z];
+    const requiredPush = minDistance - Math.abs(signedDistance);
+    const side = Math.sign(signedDistance) || 1;
+    return [
+      shiftedPosition[0] + direction.x * requiredPush * side,
+      shiftedPosition[1],
+      shiftedPosition[2] + direction.z * requiredPush * side,
+    ];
   }
 
-  private getSnapAxis(movingNodeWorld: THREE.Vector3, staticNodeWorld: THREE.Vector3) {
-    const delta = staticNodeWorld.clone().sub(movingNodeWorld);
-    if (Math.abs(delta.x) >= Math.abs(delta.z)) {
-      return new THREE.Vector3(Math.sign(delta.x) || 1, 0, 0);
+  private getConnectionAxis(
+    movingPosition: [number, number, number],
+    staticPosition: [number, number, number],
+  ) {
+    const deltaX = movingPosition[0] - staticPosition[0];
+    const deltaZ = movingPosition[2] - staticPosition[2];
+
+    if (Math.abs(deltaX) >= Math.abs(deltaZ)) {
+      return new THREE.Vector3(Math.sign(deltaX) || 1, 0, 0);
     }
-    return new THREE.Vector3(0, 0, Math.sign(delta.z) || 1);
+    return new THREE.Vector3(0, 0, Math.sign(deltaZ) || 1);
   }
 
   private getExtentAlongAxis(model: PlacedModel, axis: THREE.Vector3) {

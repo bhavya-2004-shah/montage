@@ -127,7 +127,20 @@ export const Canvas3D = observer(() => {
 
       const worldPosition = toWorldPosition(event);
       if (!worldPosition) {
-        console.warn("[DnD] World position fallback will be used (random near center)");
+        const hasExistingModules = modelManager.placedModels.length > 0;
+        if (hasExistingModules) {
+          if (typeof window !== "undefined") {
+            window.alert(
+              "Drop failed near canvas edge. Please drop inside the scene area.",
+            );
+          }
+          console.warn(
+            "[DnD] Drop blocked because world position could not be resolved for non-first module",
+          );
+          return;
+        }
+
+        console.warn("[DnD] World position unavailable; first module will use center");
       }
       modelManager.addModel(model, worldPosition ?? undefined);
     },
